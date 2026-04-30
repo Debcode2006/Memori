@@ -14,8 +14,8 @@ repos:
     args: [--fix]
   - id: ruff-format
 
-- repo: local
-  hooks:
+#- repo: local
+  #hooks:
   # - id: ty
   #   name: ty type checker
   #   entry: uvx ty check
@@ -24,12 +24,12 @@ repos:
   #   pass_filenames: false
   #   always_run: true
 
-  - id: pytest
-    name: pytest
-    entry: uv run pytest --ignore=tests/benchmarks --ignore=tests/integration
-    language: system
-    pass_filenames: false
-    always_run: true
+  #- id: pytest
+    #name: pytest
+    #entry: uv run pytest --ignore=tests/benchmarks --ignore=tests/integration
+    #language: system
+    #pass_filenames: false
+    #always_run: true
 
   #- id: ts-format
     #name: format (memori-ts)

@@ -1,11 +1,15 @@
 ---
 title: OpenClaw Overview
-description: Give your OpenClaw agents structured, persistent memory with the Memori plugin — auto-recall and auto-capture across every session.
+description: Give your OpenClaw agents structured, persistent memory with the Memori plugin — agent-controlled recall and automatic capture across every session.
 ---
 
 # OpenClaw Overview
 
-By default, OpenClaw agents forget everything between sessions. The Memori plugin fixes that. It watches conversations, extracts what matters, and brings it back when relevant — automatically.
+Memori gives OpenClaw agents a structured, long-term memory system. It automatically captures what happens and lets agents recall it on demand — so context survives across sessions without bloating the prompt.
+
+Instead of replaying transcripts or relying on lossy summaries, Memori builds a persistent **experience layer** that agents can query when it matters.
+
+---
 
 ## The Problem with OpenClaw's Built-In Memory
 
@@ -16,54 +20,263 @@ OpenClaw ships with a basic memory layer, but it has fundamental limitations tha
 | **Flat markdown files** | Memory lives in plain text files with no structure or relationships. The agent reads and writes large chunks of text with no way to index, query, or deduplicate facts. |
 | **Context compaction** | As sessions grow longer, important details begin to disappear. Memory gets lost when context is compressed to stay within token limits. |
 | **No relationship reasoning** | OpenClaw retrieves semantically similar text, but cannot understand relationships between facts or connect them to each other. |
+| **Weak daily briefs** | Daily summaries are shallow and lossy, missing key decisions, constraints, and patterns from prior sessions. |
 | **Cross-project noise** | When working across multiple projects, memories are not isolated. Searches return irrelevant results from other contexts, polluting the agent's responses. |
 | **No user isolation** | Users do not have their own isolated memories. Memories bleed across users and data is mixed, creating privacy and relevance issues. |
 
+---
+
 ## What Changes When You Add Memori?
 
-The Memori plugin replaces OpenClaw's flat-file memory workflow with managed, structured memory that is scoped by `entity_id`, `process_id`, and `session_id` and enriched automatically through OpenClaw's existing hooks.
+The Memori plugin replaces OpenClaw’s flat-file memory workflow with structured, scoped memory.
 
-### 1. Structured memory storage
+### Memory scoping model
 
-Instead of raw markdown blobs, Memori stores conversations, facts, preferences, and knowledge-graph triples as structured records tied to an entity, process, and session. Facts are extracted as subject-predicate-object relationships, deduplicated over time, and connected into a graph so related memories stay queryable instead of being buried in text files.
+Memories are organized using four core identifiers:
 
-### 2. Advanced Augmentation
+- **Project (`project_id`)** → The broader domain (e.g., “sales prospecting”)
+- **Process (`process_id`)** → The agent itself (e.g., “bob_the_sales_prospector”)
+- **Session (`session_id`)** → A specific run (e.g., “prospecting_2026-04-29”)
+- **Entity (`entity_id`)** → The subject of memory (e.g., the user, customer, or system being tracked)
 
-After each conversation, Memori processes the user and assistant exchange asynchronously in the background, identifies facts, preferences, skills, and attributes, generates embeddings for semantic search, and updates the knowledge graph without blocking the agent's response path.
+> Note: If a `session_id` is provided, a `project_id` must also be provided.
+> All timestamps are stored in **UTC**.
 
-### 3. Intelligent Recall
+---
 
-Before the agent responds, Memori searches the current entity's stored facts and knowledge graph, ranks memories by semantic relevance and importance, and injects the most useful context into the prompt so durable knowledge survives context-window compression.
+## Core Capabilities
 
-### 4. Production-ready observability
+### 1. Memory generation and experience layer
 
-Memori Cloud gives you dashboard visibility into memory creation, recalls, cache hit rate, sessions, quota usage, top subjects, per-memory retrieval metrics, and knowledge-graph relationships, so you can inspect what was stored and how recall is behaving in production.
+Memori transforms raw agent sessions (messages + traces) into structured memory and a continuously updated summary.
 
-> The plugin still remains drop-in: OpenClaw handles the agent loop, while Memori adds recall, augmentation, sanitization, and observability around it.
+Instead of replaying full transcripts, it builds a compact, reusable **experience layer** that allows agents to maintain continuity across long-running interactions.
+
+The system focuses on extracting what matters:
+
+- Key facts
+- Decisions
+- Outcomes
+- Patterns
+
+Rather than preserving every detail, Memori prioritizes signal over noise — keeping context lean while retaining meaning. This avoids replaying or summarizing entire conversations on every turn.
+
+#### Dual memory model
+
+Memori stores knowledge in two complementary forms:
+
+- **Structured, typed memory** — precise, queryable records (facts, decisions, constraints, etc.) used for targeted retrieval and reasoning
+- **Rolling summaries** — continuously updated context used for grounding and situational awareness
+
+Structured memory is stored in a knowledge graph, enabling relationships, deduplication, and precise retrieval.
+
+#### Grounded in actions, not just text
+
+Memori incorporates tool calls and execution traces alongside conversation data. This means memory reflects what actually happened — not just what was discussed.
+
+By grounding memory in actions and outcomes, the system produces more reliable, verifiable, and actionable context.
+
+---
+
+### 2. Advanced Augmentation (automatic)
+
+After each interaction, Memori processes the conversation asynchronously.
+
+- Extracts facts, preferences, and attributes
+- Classifies memory types
+- Generates embeddings for semantic retrieval
+- Updates structured memory and the knowledge graph
+
+This is how the experience layer is continuously built and updated over time.
+
+It runs **after the agent responds** and does not impact latency.
+
+---
+
+### 3. Agent-controlled recall
+
+Recall is **explicit and initiated by the agent**.
+
+Memori separates memory capture from memory usage:
+
+- Capture is automatic (advanced augmentation)
+- Recall is intentional (agent-controlled)
+
+Agents decide:
+
+- When to recall
+- What scope to recall from
+- How much history to include
+
+Supported parameters:
+
+- `entity_id`
+- `project_id`
+- `session_id`
+- `date_start`
+- `date_end`
+- `source`
+- `signal`
+
+#### Memory classification schema
+
+**Sources**
+- constraint
+- decision
+- execution
+- fact
+- insight
+- instruction
+- status
+- strategy
+- task
+
+**Signals**
+- commit
+- discovery
+- failure
+- inference
+- pattern
+- result
+- update
+- verification
+
+#### Default behavior
+
+- If no date range is provided → returns **all-time**
+
+#### Returned context may include:
+
+- Relevant facts
+- Prior decisions
+- Constraints
+- Patterns
+- Summaries
+
+---
+
+### 4. Summaries and daily briefs
+
+Memori provides structured summaries that go beyond OpenClaw’s default daily brief.
+
+These summaries are generated from structured memory and execution traces — not just compressed conversation history.
+
+They represent the agent’s **working state**, not just a recap.
+
+#### Daily brief structure
+
+Memori generates a consistent, structured daily brief with the following sections:
+
+- **Today at a glance** — high-level summary of activity and progress
+- **Top 3 next actions** — highest priority tasks
+- **Top 3 risks** — immediate risks or blockers
+- **Verify before acting** — assumptions requiring validation
+- **Recent decisions** — key decisions and context
+- **Mission stack** — active goals and objectives
+- **Hard constraints** — non-negotiable rules
+- **Current status** — current state of execution
+- **Open loops** — unresolved tasks or dependencies
+- **Known failures and anti-patterns** — what to avoid
+- **Staleness warnings** — potentially outdated information
+
+This structure ensures the daily brief is:
+
+- Actionable
+- Reliable
+- Context-aware
+
+Supported parameters:
+
+- `project_id`
+- `session_id`
+- `date_start`
+- `date_end`
+
+#### Default behavior
+
+- If no date range is provided → returns **last 24 hours**
+
+---
+
+### 5. Production-ready observability
+
+Memori Cloud provides full visibility into memory behavior:
+
+- Memory creation and updates
+- Recall activity and hit rates
+- Session tracking
+- Quota usage
+- Top entities and subjects
+- Retrieval performance metrics
+
+---
+
+## How it Works
+
+Memori separates memory into two systems:
+
+- **Advanced Augmentation (automatic)** — captures and structures memory
+- **Agent-controlled recall (on demand)** — retrieves memory when needed
+
+### 1. Advanced Augmentation (`agent_end` hook)
+
+1. Extract the latest user and assistant messages
+2. Sanitize the exchange (remove metadata, timestamps, thinking blocks)
+3. Send asynchronously to Memori
+4. Memori:
+   - Extracts durable facts
+   - Deduplicates and updates memory
+   - Updates structured memory and the knowledge graph
+
+This runs in the background and **never blocks the agent’s response**.
+
+---
+
+### 2. Agent-controlled recall (plugin tools)
+
+Memori does not automatically inject memory. The agent retrieves it explicitly.
+
+Available tools:
+
+- **`memori_recall`**
+  Query structured memory for facts, constraints, decisions, and patterns
+
+- **`memori_recall_summary`**
+  Retrieve summaries and the daily brief
+
+- **`memori_feedback`**
+  Report on memory quality to improve the system
+
+---
+
+### 3. Retrieval model
+
+Memori returns:
+
+- High-signal structured memory
+- Rolling summaries and daily briefs
+- Context scoped by entity, project, session, and time
+
+This keeps context:
+
+- **Targeted**
+- **Compact**
+- **Actionable**
 
 
-## How It Works
+## Memori and Agent Interaction
 
-The plugin hooks into two points in OpenClaw's event lifecycle:
+Memori provides agents with a set of tools to interact with memory in real time.
 
-### 1. `before_prompt_build` — Intelligent Recall
+- **Feedback (`memori_feedback`)**
+  Agents can send feedback to improve memory quality, including missing context or incorrect recall.
 
-When a user sends a message, the plugin:
+- **Updates**
+  Memori evolves over time. Agents can detect new capabilities and adapt their behavior accordingly.
 
-1. Intercepts the event and extracts the user's prompt
-2. Sanitizes the prompt (strips metadata, timestamps, system messages)
-3. Queries the Memori API for relevant memories
-4. Prepends matching memories to the agent's system context
+- **Quota awareness**
+  Memori enforces usage limits. When limits are reached, agents can adjust recall behavior and inform the user if needed.
 
-The agent then responds with full awareness of prior context.
+These interactions make Memori a two-way system: agents don’t just retrieve memory — they help improve and shape it over time.
 
-### 2. `agent_end` — Advanced Augmentation
-
-After the agent finishes responding, the plugin:
-
-1. Extracts the last user and assistant messages
-2. Sanitizes both (removes thinking blocks, metadata fences, timestamps)
-3. Sends the cleaned exchange to the Memori API
-4. Memori extracts durable facts, updates stale ones, and merges duplicates
-
-This runs asynchronously and never blocks the agent's response.
+See skills.md for detailed agent behavior.

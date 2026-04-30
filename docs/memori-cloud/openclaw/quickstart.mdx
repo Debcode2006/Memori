@@ -5,13 +5,14 @@ description: Install and configure the Memori plugin for OpenClaw in under 5 min
 
 # OpenClaw Quickstart
 
-Get persistent memory running in your OpenClaw gateway in three steps.
+Get a structured, long-term memory system running in your OpenClaw gateway in three steps.
 
 ## Prerequisites
 
 - [OpenClaw](https://openclaw.ai) `v2026.3.2` or later
 - A Memori API key from [app.memorilabs.ai](https://app.memorilabs.ai)
-- An Entity ID to attribute memories to (e.g., a user ID or agent name)
+- An Entity ID to scope memory to a specific user, agent, or system
+- A Project ID to scope memory to a specific project or workspace
 
 ## 1. Install and Enable
 
@@ -21,20 +22,19 @@ openclaw plugins install @memorilabs/openclaw-memori
 
 # Enable it in your workspace
 openclaw plugins enable openclaw-memori
-
-# Restart the gateway to load the plugin
-openclaw gateway restart
 ```
 
 ## 2. Configure
 
-You need two values: your Memori API key and an Entity ID.
+You need three values: your Memori API key, an Entity ID, and a Project ID.
 
 ### Option A: Via CLI (Recommended)
 
 ```bash
-openclaw config set plugins.entries.openclaw-memori.config.apiKey "YOUR_MEMORI_API_KEY"
-openclaw config set plugins.entries.openclaw-memori.config.entityId "your-app-user-id"
+openclaw memori init \
+  --api-key "YOUR_MEMORI_API_KEY" \
+  --entity-id "your-app-user-id" \
+  --project-id "my-project"
 ```
 
 ### Option B: Via `openclaw.json`
@@ -49,7 +49,8 @@ Add the following to `~/.openclaw/openclaw.json`:
         "enabled": true,
         "config": {
           "apiKey": "your-memori-api-key",
-          "entityId": "your-app-user-id"
+          "entityId": "your-app-user-id",
+          "projectId": "my-project"
         }
       }
     }
@@ -61,61 +62,72 @@ Add the following to `~/.openclaw/openclaw.json`:
 
 <Properties>
   <Property name="apiKey" type="string" required>
-    Your Memori API key from [app.memorilabs.ai](https://app.memorilabs.ai).
+    Your Memori API key, available from [app.memorilabs.ai](https://app.memorilabs.ai).
   </Property>
   <Property name="entityId" type="string" required>
-    The unique identifier for the entity (user, agent, or tenant) to attribute memories to.
+    A unique identifier for the entity (user, agent, or tenant) to attribute memories to.
+  </Property>
+  <Property name="projectId" type="string" required>
+    A project or workspace ID used to scope all extracted facts and summaries.
   </Property>
 </Properties>
 
 ## 3. Verify
 
-After configuring, restart the gateway and check the logs:
+After configuring, restart the gateway and verify your API connectivity:
 
 ```bash
 openclaw gateway restart
-openclaw gateway logs --filter "[Memori]"
+openclaw memori status --check
 ```
 
 You should see:
 
 ```
-[Memori] === INITIALIZING PLUGIN ===
-[Memori] Tracking Entity ID: your-app-user-id
+Memori Plugin Status
+────────────────────────────────────
+  API Key:    ****...A3xQ
+  Entity ID:  your-app-user-id
+  Project ID: my-project
+
+Checking API connectivity... OK
+Status: Ready
 ```
 
-### Test the Memory Loop
+### Test the Full Memory Loop
 
-1. Send a message with a preference:
+1. Send a message with a durable preference:
    > "I always use TypeScript and prefer functional patterns."
 
-2. Check the logs for a successful augmentation:
+2. Check the gateway logs to confirm advanced augmentation ran in the background:
    ```
-   [Memori] === AUGMENTATION HOOK START ===
-   [Memori] Capturing conversation turn...
    [Memori] Augmentation successful!
    ```
 
-3. In a new session, ask a question that should trigger recall:
-   > "Write a hello world script."
+3. Start a new session (so the agent is a blank slate) and ask:
+   > "Write a hello world script in my preferred language."
 
-4. The agent should recall and apply your TypeScript preference automatically:
+4. Confirm the agent used `memori_recall` to fetch your preferences:
    ```
-   [Memori] === RECALL HOOK START ===
-   [Memori] Executing SDK Recall...
-   [Memori] Successfully injected memory context.
+   [Memori] memori_recall params: {"projectId":"my-project","query":"preferred programming language"}
    ```
+
+5. Tell the agent to send feedback:
+   > "Send feedback to the developers that the recall was perfect." (This will trigger the `memori_feedback` tool).
+
 
 ## What Happens Under the Hood
 
-Once installed, the plugin works automatically on every conversation turn:
+The Memori plugin operates on two parallel tracks:
 
-| Phase | Hook | What the plugin does |
+| Track | Mechanism | What it does |
 | --- | --- | --- |
-| **Before response** | `before_prompt_build` | Queries Memori for relevant memories and injects them into the agent's context |
-| **After response** | `agent_end` | Extracts the user/assistant exchange, sanitizes it, and sends it to Memori for fact extraction |
+| **Agent-Controlled Recall** | Plugin Tools | Equips the agent with `memori_recall`, `memori_recall_summary`, and `memori_feedback`. The agent retrieves memory explicitly when needed. |
+| **Advanced Augmentation** | `agent_end` Hook | After the agent responds, the exchange is sanitized and sent to Memori in the background to update structured memory and the knowledge graph. |
 
-No changes to your agent's code or prompts are required. The plugin handles everything through OpenClaw's event lifecycle.
+Together, these systems continuously build and maintain an **experience layer** — a structured, reusable representation of what has happened over time that agents can query on demand.
+
+Memori does not automatically inject memory into the prompt. Instead, agents retrieve only the context they need, improving accuracy while avoiding unnecessary token usage.
 
 <Admonition type="tip" title="Multi-Agent Gateways">
   The plugin is fully stateless and thread-safe. You can run it across multiple agents in the same gateway without any shared state or concurrency issues.
